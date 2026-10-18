@@ -1,0 +1,32 @@
+// Windows resources compiled into the executable by build.rs.
+
+// Icon IDs: keep in sync with the ICON_* constants in src/win/tray.rs.
+// Explorer shows the icon with the lowest ID as the executable's own.
+1 ICON "idle.ico"
+2 ICON "alert.ico"
+3 ICON "paused.ico"
+
+// VERSION_* macros come from Cargo.toml via build.rs. FileDescription is also
+// the app name Windows shows on our notifications.
+1 VERSIONINFO
+FILEVERSION     VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH, 0
+PRODUCTVERSION  VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH, 0
+FILEOS          0x40004  // VOS_NT_WINDOWS32
+FILETYPE        0x1      // VFT_APP
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "FileDescription", "spike-detector"
+            VALUE "ProductName", "spike-detector"
+            VALUE "OriginalFilename", "spike-detector.exe"
+            VALUE "FileVersion", VERSION_STRING
+            VALUE "ProductVersion", VERSION_STRING
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

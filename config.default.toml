@@ -1,0 +1,90 @@
+# spike-detector settings.
+# The file is reloaded automatically after you save it.
+
+# How often to take a snapshot of all processes, in seconds. Each snapshot costs a few
+# milliseconds of kernel time. Detectors look at minutes-long windows, so polling more
+# often than every 30 seconds adds cost without catching anything sooner.
+poll_interval_secs = 30
+
+# Remind about the same anomaly at most once every N minutes.
+renotify_after_minutes = 60
+
+# Processes never to report: exe names, case-insensitive.
+ignore = []
+
+# A process keeps the CPU busy for a long time.
+[cpu_hog]
+enabled = true
+# Averaging window, minutes.
+window_minutes = 5
+# Threshold: average load over the window, in percent of one core
+# (100 = one core fully busy, 200 = two cores).
+min_core_percent = 80
+# Skip the process whose window is in the foreground (a game, a render, a build you are watching).
+skip_foreground = true
+
+# While you are away from the keyboard, a process in your session keeps working.
+# Background services are left out: Windows runs its own maintenance when you are idle.
+# A process caught by [cpu_hog] is reported once, as a CPU hog.
+[idle_busy]
+enabled = true
+# How long without keyboard or mouse input counts as away; also the averaging window.
+idle_minutes = 10
+# Threshold: average load while you were away, in percent of one core.
+min_core_percent = 25
+
+# A dev tool outlived its parent: the terminal or IDE is gone, the process is not.
+[orphan]
+enabled = true
+# Report once a process has been without its parent for longer than N minutes
+# (counted from the moment spike-detector noticed).
+min_minutes = 30
+# Which processes to watch.
+names = ["node.exe", "MSBuild.exe", "dotnet.exe", "esbuild.exe", "python.exe", "java.exe"]
+
+# Copies of the same dev tool pile up: watchers, test runners, build nodes nobody cleans up.
+[swarm]
+enabled = true
+# Report when at least this many instances run at once...
+min_instances = 25
+# ...each of them alive for at least N minutes, so a short burst (a parallel test run) doesn't count.
+min_minutes = 10
+# Which processes to watch.
+names = ["node.exe", "MSBuild.exe", "dotnet.exe", "esbuild.exe", "python.exe", "java.exe"]
+
+# A process's memory keeps growing and never comes back down.
+[mem_leak]
+enabled = true
+# Observation window, minutes.
+window_minutes = 30
+# Minimum growth of private bytes over the window, MB.
+min_growth_mb = 300
+# How steady the growth must be: coefficient of determination R², 0 to 1.
+# Closer to 1 means fewer false alarms on a garbage collector's sawtooth.
+min_r2 = 0.8
+
+# A process keeps opening handles or starting threads and never releases them.
+[handle_leak]
+enabled = true
+# Observation window, minutes.
+window_minutes = 30
+# Minimum growth over the window. Healthy processes hold a steady count;
+# on a typical machine even the busiest stay under ~5000 handles and ~150 threads.
+min_handle_growth = 2000
+min_thread_growth = 100
+# How steady the growth must be, as for [mem_leak].
+min_r2 = 0.8
+
+# A process pushes lots of data through its own files for minutes: a runaway logger,
+# a build stuck copying files, a watcher re-reading a tree. This counts the process's
+# file I/O as Task Manager's "I/O read/write bytes" columns do, so reads served from the
+# file cache are included; true per-process disk counters need administrator rights.
+[io_heavy]
+enabled = true
+# Averaging window, minutes.
+window_minutes = 10
+# Threshold: average reads + writes over the window, MB per second.
+# For comparison, an idle machine's busiest process typically stays under 1 MB/s.
+min_mb_per_sec = 10
+# Skip the process whose window is in the foreground (you're copying files, installing a game).
+skip_foreground = true
