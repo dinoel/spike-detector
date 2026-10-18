@@ -1,12 +1,12 @@
-//! Append-only log of announced alerts in JSON Lines: one object per line,
-//! easy to grep today and to load into a history view later.
+//! Log of announced alerts in JSON Lines: one object per line, easy to grep
+//! and read back by the history window.
 
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::alerts::Alert;
 use crate::detect::FindingKind;
@@ -18,15 +18,16 @@ pub struct History {
     path: PathBuf,
 }
 
-#[derive(Serialize)]
-struct Record<'a> {
-    unix_time: u64,
-    kind: FindingKind,
-    pid: u32,
-    name: &'a str,
-    summary: &'a str,
-    path: Option<&'a str>,
-    command_line: Option<&'a str>,
+/// One announced alert.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Entry {
+    pub unix_time: u64,
+    pub kind: FindingKind,
+    pub pid: u32,
+    pub name: String,
+    pub summary: String,
+    pub path: Option<String>,
+    pub command_line: Option<String>,
 }
 
 impl History {
@@ -34,20 +35,20 @@ impl History {
         Self { path }
     }
 
-    pub fn append(&self, alert: &Alert) -> io::Result<()> {
+    pub(crate) fn append(&self, alert: &Alert) -> io::Result<()> {
         self.rotate_if_large()?;
-        let record = Record {
+        let entry = Entry {
             unix_time: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .map_or(0, |d| d.as_secs()),
             kind: alert.finding.kind,
             pid: alert.finding.key.pid,
-            name: &alert.name,
-            summary: &alert.finding.summary,
-            path: alert.details.path.as_deref(),
-            command_line: alert.details.command_line.as_deref(),
+            name: alert.name.clone(),
+            summary: alert.finding.summary.clone(),
+            path: alert.details.path.clone(),
+            command_line: alert.details.command_line.clone(),
         };
-        let mut line = serde_json::to_vec(&record)?;
+        let mut line = serde_json::to_vec(&entry)?;
         line.push(b'\n');
         OpenOptions::new()
             .create(true)
@@ -56,11 +57,32 @@ impl History {
             .write_all(&line)
     }
 
+    /// Every logged alert, newest first, including the rotated-out file.
+    /// Lines that don't parse (a write cut short, say) are skipped.
+    pub fn entries(&self) -> io::Result<Vec<Entry>> {
+        let mut entries = Vec::new();
+        for path in [self.rotated_path(), self.path.clone()] {
+            let text = match fs::read_to_string(&path) {
+                Ok(text) => text,
+                Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
+                Err(e) => return Err(e),
+            };
+            entries.extend(
+                text.lines()
+                    .filter_map(|line| serde_json::from_str(line).ok()),
+            );
+        }
+        entries.reverse();
+        Ok(entries)
+    }
+
+    fn rotated_path(&self) -> PathBuf {
+        self.path.with_extension("1.jsonl")
+    }
+
     fn rotate_if_large(&self) -> io::Result<()> {
         match fs::metadata(&self.path) {
-            Ok(meta) if meta.len() > MAX_BYTES => {
-                fs::rename(&self.path, self.path.with_extension("1.jsonl"))
-            }
+            Ok(meta) if meta.len() > MAX_BYTES => fs::rename(&self.path, self.rotated_path()),
             _ => Ok(()),
         }
     }
@@ -81,11 +103,11 @@ mod tests {
         dir
     }
 
-    fn alert() -> Alert {
+    fn alert(pid: u32) -> Alert {
         Alert {
             finding: Finding {
                 key: ProcessKey {
-                    pid: 42,
+                    pid,
                     create_time: 1,
                 },
                 kind: FindingKind::Orphan,
@@ -103,8 +125,8 @@ mod tests {
     fn appends_one_json_object_per_line() {
         let dir = temp_dir("append");
         let history = History::new(dir.join("history.jsonl"));
-        history.append(&alert()).unwrap();
-        history.append(&alert()).unwrap();
+        history.append(&alert(42)).unwrap();
+        history.append(&alert(42)).unwrap();
 
         let text = fs::read_to_string(dir.join("history.jsonl")).unwrap();
         let lines: Vec<serde_json::Value> = text
@@ -124,10 +146,32 @@ mod tests {
         let dir = temp_dir("rotate");
         let path = dir.join("history.jsonl");
         fs::write(&path, vec![b'x'; MAX_BYTES as usize + 1]).unwrap();
-        History::new(path.clone()).append(&alert()).unwrap();
+        History::new(path.clone()).append(&alert(42)).unwrap();
 
         assert_eq!(fs::read_to_string(&path).unwrap().lines().count(), 1);
         assert!(dir.join("history.1.jsonl").exists());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn reads_back_newest_first_across_rotation() {
+        let dir = temp_dir("read");
+        let history = History::new(dir.join("history.jsonl"));
+        assert!(history.entries().unwrap().is_empty());
+
+        history.append(&alert(1)).unwrap();
+        fs::rename(dir.join("history.jsonl"), dir.join("history.1.jsonl")).unwrap();
+        history.append(&alert(2)).unwrap();
+        // A torn last line must not hide the rest.
+        OpenOptions::new()
+            .append(true)
+            .open(dir.join("history.jsonl"))
+            .unwrap()
+            .write_all(b"{\"unix_time\":")
+            .unwrap();
+
+        let pids: Vec<u32> = history.entries().unwrap().iter().map(|e| e.pid).collect();
+        assert_eq!(pids, [2, 1]);
         fs::remove_dir_all(dir).unwrap();
     }
 }

@@ -1,0 +1,8 @@
+// Windows resources of the settings and history window, compiled into it by
+// ui/build.rs.
+
+1 ICON "idle.ico"
+
+#define DESCRIPTION "spike-detector settings and history"
+#define FILENAME "spike-detector-ui.exe"
+#include "version.rc"

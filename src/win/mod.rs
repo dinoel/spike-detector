@@ -1,12 +1,13 @@
-//! Small, safe wrappers over the Win32 APIs the app uses.
+//! Small, safe wrappers over the Win32 APIs the app uses. Only `shell` and
+//! `system` are public, for the settings window; the rest serves the monitor.
 
-pub mod autostart;
-pub mod menu;
-pub mod process;
+pub(crate) mod autostart;
+pub(crate) mod menu;
+pub(crate) mod process;
 pub mod shell;
 pub mod system;
-pub mod tray;
-pub mod window;
+pub(crate) mod tray;
+pub(crate) mod window;
 
 use std::ffi::OsStr;
 use std::iter;
@@ -15,13 +16,13 @@ use std::os::windows::ffi::OsStrExt;
 use windows_sys::Win32::Foundation::UNICODE_STRING;
 
 /// NUL-terminated UTF-16 copy of `s`, for `*W` APIs.
-pub fn wide(s: impl AsRef<OsStr>) -> Vec<u16> {
+pub(crate) fn wide(s: impl AsRef<OsStr>) -> Vec<u16> {
     s.as_ref().encode_wide().chain(iter::once(0)).collect()
 }
 
 /// Copies `s` into a fixed-size, NUL-terminated UTF-16 field of a Win32
 /// struct, cutting it short with an ellipsis if it doesn't fit.
-pub fn copy_to_fixed(dst: &mut [u16], s: &str) {
+pub(crate) fn copy_to_fixed(dst: &mut [u16], s: &str) {
     const ELLIPSIS: u16 = 0x2026;
     // One unit is always reserved for the terminating NUL.
     let Some(capacity) = dst.len().checked_sub(1) else {
@@ -48,7 +49,7 @@ pub fn copy_to_fixed(dst: &mut [u16], s: &str) {
 
 /// Byte view of a `u64` buffer; NT query buffers are kept as `u64`s so the
 /// structs inside them are suitably aligned.
-pub fn as_bytes(words: &[u64]) -> &[u8] {
+pub(crate) fn as_bytes(words: &[u64]) -> &[u8] {
     // SAFETY: any initialized `u64` is also valid as bytes, and the length
     // covers exactly the same memory.
     unsafe { std::slice::from_raw_parts(words.as_ptr().cast(), std::mem::size_of_val(words)) }
@@ -56,7 +57,7 @@ pub fn as_bytes(words: &[u64]) -> &[u8] {
 
 /// Text of a `UNICODE_STRING` that an NT query placed inside `buf`.
 /// Returns `None` if it points anywhere else or is malformed.
-pub fn utf16_in<'a>(buf: &'a [u8], s: &UNICODE_STRING) -> Option<&'a [u16]> {
+pub(crate) fn utf16_in<'a>(buf: &'a [u8], s: &UNICODE_STRING) -> Option<&'a [u16]> {
     if s.Length == 0 {
         return Some(&[]);
     }

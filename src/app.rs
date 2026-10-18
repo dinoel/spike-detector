@@ -35,10 +35,19 @@ pub enum Command {
     IgnoreName(String),
     TogglePause,
     ToggleAutostart,
-    OpenConfig,
-    OpenHistory,
+    Open(Page),
     Exit,
 }
+
+/// A tab of the settings and history window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Page {
+    Settings,
+    History,
+}
+
+/// The settings and history window, installed next to the monitor.
+const WINDOW_EXE: &str = "spike-detector-ui.exe";
 
 /// What the window procedure should do after a command.
 pub enum Flow {
@@ -145,8 +154,8 @@ impl App {
                 command: Command::ToggleAutostart,
                 checked: autostart::is_enabled(),
             },
-            Entry::action("Settings…", Command::OpenConfig),
-            Entry::action("History…", Command::OpenHistory),
+            Entry::action("Settings…", Command::Open(Page::Settings)),
+            Entry::action("History…", Command::Open(Page::History)),
             Entry::Separator,
             Entry::action("Exit", Command::Exit),
         ]);
@@ -173,16 +182,7 @@ impl App {
                 "Could not change autostart",
                 autostart::set_enabled(!autostart::is_enabled()),
             ),
-            Command::OpenConfig => {
-                self.report("Could not open settings", shell::open(&self.paths.config))
-            }
-            Command::OpenHistory if !self.paths.history.exists() => {
-                self.tray
-                    .show_balloon(Notice::Info, "History is empty", "No notifications yet.");
-            }
-            Command::OpenHistory => {
-                self.report("Could not open history", shell::open(&self.paths.history))
-            }
+            Command::Open(page) => self.open_window(page),
             Command::Exit => return Flow::Quit,
         }
         self.refresh_status();
@@ -270,6 +270,38 @@ impl App {
                 alert.finding.kind.label()
             ),
             entries,
+        }
+    }
+
+    /// Opens the settings and history window on `page`. Without the window
+    /// (a monitor built or copied on its own), opens the files themselves.
+    fn open_window(&self, page: Page) {
+        let window = std::env::current_exe().map(|exe| exe.with_file_name(WINDOW_EXE));
+        if let Ok(window) = window
+            && window.exists()
+        {
+            let flag = match page {
+                Page::Settings => "--settings",
+                Page::History => "--history",
+            };
+            let launched = std::process::Command::new(window)
+                .arg(flag)
+                .spawn()
+                .map(drop);
+            self.report("Could not open the window", launched);
+            return;
+        }
+        match page {
+            Page::Settings => {
+                self.report("Could not open settings", shell::open(&self.paths.config))
+            }
+            Page::History if !self.paths.history.exists() => {
+                self.tray
+                    .show_balloon(Notice::Info, "History is empty", "No notifications yet.");
+            }
+            Page::History => {
+                self.report("Could not open history", shell::open(&self.paths.history))
+            }
         }
     }
 

@@ -2,7 +2,7 @@
 
 A Windows tray app that watches for anomalous background processes and tells you about them with a notification.
 What to do about them is your call: the tray menu lets you end a process, show it in Explorer, or ignore it.
-No administrator rights needed.
+A separate window shows the history of notifications and edits the settings. No administrator rights needed.
 
 ## What counts as an anomaly
 
@@ -38,8 +38,8 @@ reports every thread too. Everything the app does with the result takes about 0.
 minutes-long windows with history points 30 s apart, so polling faster only adds cost.
 
 ```
-src/
-  main.rs        entry point, window procedure
+src/             library shared by both executables, plus the monitor's main.rs
+  monitor.rs     the monitor's hidden window, message loop and window procedure
   app.rs         one monitoring pass per tick, tray menu, commands
   sampler.rs     process snapshot (FFI; struct layout checked at compile time)
   tracker.rs     process table, sparse history (a point every 30 s), orphans, descendant tree
@@ -48,6 +48,7 @@ src/
   history.rs     JSON Lines log of notifications
   config.rs      settings
   win/           thin safe wrappers over Win32: tray, menu, window, processes, autostart, shell
+ui/              the settings and history window (egui)
 ```
 
 Kept small on purpose:
@@ -61,14 +62,30 @@ Kept small on purpose:
 A process is identified by (PID, creation time). "End process" re-checks the creation time right before
 terminating, so a recycled PID can never get an unrelated process killed.
 
+## Settings and history window
+
+**Settings…** and **History…** in the tray menu open `spike-detector-ui.exe` on the matching tab. It is a separate
+program built with egui and lives only while its window is open, so the monitor never loads a GUI toolkit (its
+imports have no OpenGL, GDI or COM). The two talk through the same files: the window edits `config.toml`, which the
+monitor reloads by itself, and reads `history.jsonl`, which the monitor appends to.
+
+- **History**: every notification, newest first; filter by kind or text (process, details, command line). The most
+  frequent processes are listed above the table, the first candidates for a higher threshold or the ignore list.
+  Hover a process for its path and command line, right-click to copy the command line or show it in Explorer, or
+  **Always ignore** it.
+- **Settings**: a form over every setting. Saving writes only the values you changed, so comments and formatting
+  in the file stay; invalid values never reach the file. If the file changes elsewhere while the form has unsaved
+  edits, the form says so instead of overwriting them silently.
+
 ## Install
 
 ```
 pwsh -File install.ps1
 ```
 
-Builds a release, closes the running copy (if any), installs the exe into `%LOCALAPPDATA%\Programs\spike-detector\`
-and starts it. Run it again after every change. `-SkipBuild` installs the existing `target\release` build.
+Builds a release of both programs, closes running copies, installs them into
+`%LOCALAPPDATA%\Programs\spike-detector\` and starts the monitor. Run it again after every change. `-SkipBuild`
+installs the existing `target\release` build.
 
 Then tick **Start with Windows** in the tray menu. It writes the per-user `Run` key (no admin), pointing at the
 installed exe. If you turn the entry off in Task Manager or Settings > Apps > Startup, the menu shows it as off;
@@ -77,8 +94,8 @@ ticking it again turns it back on.
 ## Icons
 
 `assets/make-icons.ps1` draws the tray icons (teal: all clear, orange: anomalies, grey: paused) at every size from
-16 to 256 px, with a simplified shape for the small ones. `build.rs` compiles them into the executable together
-with version info from `Cargo.toml`. After editing the script, run `pwsh -File assets/make-icons.ps1` and rebuild.
+16 to 256 px, with a simplified shape for the small ones, plus `icon.png` for the window. `build.rs` and
+`ui/build.rs` compile them into the executables together with version info from `Cargo.toml`. After editing the script, run `pwsh -File assets/make-icons.ps1` and rebuild.
 
 ## Files
 
@@ -89,9 +106,9 @@ with version info from `Cargo.toml`. After editing the script, run `pwsh -File a
 ## Building
 
 ```
-cargo build --release
-cargo test
-cargo clippy --all-targets -- -D warnings
+cargo build --release --workspace
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
 ```
 
 Needs stable Rust and MSVC with the x64 CRT libraries and a Windows SDK. If plain `cargo` fails to link

@@ -1,6 +1,7 @@
 # Builds spike-detector and installs it for the current user into
-# %LOCALAPPDATA%\Programs\spike-detector. A running copy is closed first
-# and the new one is started afterwards. No administrator rights needed.
+# %LOCALAPPDATA%\Programs\spike-detector: the tray monitor and its settings
+# and history window. Running copies are closed first, and the monitor is
+# started afterwards. No administrator rights needed.
 #
 # Usage: pwsh -File install.ps1 [-SkipBuild]
 
@@ -10,9 +11,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$built = Join-Path $PSScriptRoot 'target\release\spike-detector.exe'
+$programs = 'spike-detector', 'spike-detector-ui'
 $installDir = Join-Path $env:LOCALAPPDATA 'Programs\spike-detector'
-$installed = Join-Path $installDir 'spike-detector.exe'
 
 # Rust picks the newest Visual Studio, which may lack the x64 C++ libraries,
 # and vcvars picks the newest Windows SDK, which may be incomplete. Load the
@@ -40,19 +40,23 @@ if (-not $SkipBuild) {
         $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
     }
     Enter-MsvcEnvironment
-    cargo build --release --manifest-path (Join-Path $PSScriptRoot 'Cargo.toml')
+    cargo build --release --workspace --manifest-path (Join-Path $PSScriptRoot 'Cargo.toml')
     if ($LASTEXITCODE -ne 0) { throw 'cargo build failed' }
 }
-if (-not (Test-Path $built)) { throw "Nothing to install: $built does not exist." }
+$built = $programs | ForEach-Object { Join-Path $PSScriptRoot "target\release\$_.exe" }
+foreach ($exe in $built) {
+    if (-not (Test-Path $exe)) { throw "Nothing to install: $exe does not exist." }
+}
 
 # Close running copies the polite way (WM_CLOSE), so the tray icon goes away.
-$running = @(Get-Process spike-detector -ErrorAction SilentlyContinue)
+$running = @(Get-Process -Name $programs -ErrorAction SilentlyContinue)
 foreach ($process in $running) { taskkill /PID $process.Id | Out-Null }
 foreach ($process in $running) {
-    if (-not $process.WaitForExit(5000)) { throw "spike-detector (PID $($process.Id)) did not exit; close it from the tray and retry." }
+    if (-not $process.WaitForExit(5000)) { throw "$($process.Name) (PID $($process.Id)) did not exit; close it and retry." }
 }
 
 New-Item -ItemType Directory -Force $installDir | Out-Null
-Copy-Item $built $installed -Force
-Start-Process $installed
-Write-Host "Installed and started $installed"
+Copy-Item $built $installDir -Force
+$monitor = Join-Path $installDir 'spike-detector.exe'
+Start-Process $monitor
+Write-Host "Installed into $installDir and started the monitor."

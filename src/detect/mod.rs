@@ -9,13 +9,13 @@ mod orphan;
 mod swarm;
 mod trend;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
 use crate::sampler::ProcessKey;
 use crate::tracker::TrackedProcess;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FindingKind {
     CpuHog,
@@ -28,6 +28,16 @@ pub enum FindingKind {
 }
 
 impl FindingKind {
+    pub const ALL: [Self; 7] = [
+        Self::CpuHog,
+        Self::IdleBusy,
+        Self::Orphan,
+        Self::Swarm,
+        Self::MemLeak,
+        Self::HandleLeak,
+        Self::IoHeavy,
+    ];
+
     pub fn label(self) -> &'static str {
         match self {
             Self::CpuHog => "high CPU",

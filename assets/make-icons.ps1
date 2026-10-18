@@ -89,3 +89,7 @@ foreach ($state in $states.Keys) {
     Write-Ico $file $frames $sizes
     "{0,-8} {1,6:N0} bytes" -f "$state.ico", (Get-Item $file).Length
 }
+
+# The settings window sets its own window icon from a plain PNG.
+[System.IO.File]::WriteAllBytes((Join-Path $PSScriptRoot 'icon.png'), (New-IconPng 256 $states.idle))
+"icon.png written"

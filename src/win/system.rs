@@ -43,13 +43,18 @@ impl SingleInstance {
     }
 }
 
-/// Opts into EcoQoS: Windows may run us on efficiency cores at low clocks.
-/// Our work is tiny and not latency-sensitive, so this costs nothing.
-pub fn enable_eco_qos() {
+/// Opts in or out of EcoQoS, where Windows may run the process on efficiency
+/// cores at low clocks. Right for the monitor (tiny, latency-insensitive
+/// work), wrong for a window someone is interacting with.
+pub fn set_eco_qos(enabled: bool) {
     let state = PROCESS_POWER_THROTTLING_STATE {
         Version: PROCESS_POWER_THROTTLING_CURRENT_VERSION,
         ControlMask: PROCESS_POWER_THROTTLING_EXECUTION_SPEED,
-        StateMask: PROCESS_POWER_THROTTLING_EXECUTION_SPEED,
+        StateMask: if enabled {
+            PROCESS_POWER_THROTTLING_EXECUTION_SPEED
+        } else {
+            0
+        },
     };
     // SAFETY: `state` is a valid struct of the stated size. Best effort:
     // older Windows versions reject it, which is fine.

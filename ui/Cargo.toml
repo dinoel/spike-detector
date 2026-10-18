@@ -1,0 +1,16 @@
+[package]
+name = "spike-detector-ui"
+version = "0.1.0"
+edition = "2024"
+description = "Settings and history window for spike-detector"
+publish = false
+
+[dependencies]
+eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "clipboard"] }
+egui_extras = "0.37"
+spike-detector = { path = ".." }
+toml_edit = "0.25"
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Time", "Win32_UI_WindowsAndMessaging"] }
+
+[build-dependencies]
+embed-resource = "3"

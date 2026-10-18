@@ -247,73 +247,38 @@ impl Config {
     }
 
     fn validate(&self) -> Result<(), ConfigError> {
-        let ranges: [(&str, u32, RangeInclusive<u32>); 16] = [
-            ("poll_interval_secs", self.poll_interval_secs, 1..=3600),
-            (
-                "renotify_after_minutes",
-                self.renotify_after_minutes,
-                1..=10_080,
-            ),
-            (
-                "cpu_hog.window_minutes",
-                self.cpu_hog.window_minutes,
-                1..=1440,
-            ),
-            (
-                "cpu_hog.min_core_percent",
-                self.cpu_hog.min_core_percent,
-                1..=10_000,
-            ),
-            (
-                "idle_busy.idle_minutes",
-                self.idle_busy.idle_minutes,
-                1..=1440,
-            ),
+        let values = [
+            ("poll_interval_secs", self.poll_interval_secs),
+            ("renotify_after_minutes", self.renotify_after_minutes),
+            ("cpu_hog.window_minutes", self.cpu_hog.window_minutes),
+            ("cpu_hog.min_core_percent", self.cpu_hog.min_core_percent),
+            ("idle_busy.idle_minutes", self.idle_busy.idle_minutes),
             (
                 "idle_busy.min_core_percent",
                 self.idle_busy.min_core_percent,
-                1..=10_000,
             ),
-            ("orphan.min_minutes", self.orphan.min_minutes, 0..=10_080),
-            ("swarm.min_instances", self.swarm.min_instances, 2..=10_000),
-            ("swarm.min_minutes", self.swarm.min_minutes, 0..=10_080),
-            (
-                "mem_leak.window_minutes",
-                self.mem_leak.window_minutes,
-                5..=1440,
-            ),
-            (
-                "mem_leak.min_growth_mb",
-                self.mem_leak.min_growth_mb,
-                1..=1_000_000,
-            ),
+            ("orphan.min_minutes", self.orphan.min_minutes),
+            ("swarm.min_instances", self.swarm.min_instances),
+            ("swarm.min_minutes", self.swarm.min_minutes),
+            ("mem_leak.window_minutes", self.mem_leak.window_minutes),
+            ("mem_leak.min_growth_mb", self.mem_leak.min_growth_mb),
             (
                 "handle_leak.window_minutes",
                 self.handle_leak.window_minutes,
-                5..=1440,
             ),
             (
                 "handle_leak.min_handle_growth",
                 self.handle_leak.min_handle_growth,
-                1..=10_000_000,
             ),
             (
                 "handle_leak.min_thread_growth",
                 self.handle_leak.min_thread_growth,
-                1..=100_000,
             ),
-            (
-                "io_heavy.window_minutes",
-                self.io_heavy.window_minutes,
-                1..=1440,
-            ),
-            (
-                "io_heavy.min_mb_per_sec",
-                self.io_heavy.min_mb_per_sec,
-                1..=100_000,
-            ),
+            ("io_heavy.window_minutes", self.io_heavy.window_minutes),
+            ("io_heavy.min_mb_per_sec", self.io_heavy.min_mb_per_sec),
         ];
-        for (name, value, range) in ranges {
+        for (name, value) in values {
+            let range = limits(name);
             if !range.contains(&value) {
                 return Err(ConfigError::Invalid(format!(
                     "{name} must be between {} and {}, got {value}",
@@ -334,6 +299,27 @@ impl Config {
             }
         }
         Ok(())
+    }
+}
+
+/// Allowed range of an integer setting, by its dotted name as written in the
+/// file. Shared by validation and the settings window's input fields.
+///
+/// # Panics
+/// If `name` isn't an integer setting: a typo in the caller.
+pub fn limits(name: &str) -> RangeInclusive<u32> {
+    match name {
+        "poll_interval_secs" => 1..=3600,
+        "renotify_after_minutes" => 1..=10_080,
+        "cpu_hog.window_minutes" | "idle_busy.idle_minutes" | "io_heavy.window_minutes" => 1..=1440,
+        "cpu_hog.min_core_percent" | "idle_busy.min_core_percent" => 1..=10_000,
+        "orphan.min_minutes" | "swarm.min_minutes" => 0..=10_080,
+        "swarm.min_instances" => 2..=10_000,
+        "mem_leak.window_minutes" | "handle_leak.window_minutes" => 5..=1440,
+        "mem_leak.min_growth_mb" => 1..=1_000_000,
+        "handle_leak.min_handle_growth" => 1..=10_000_000,
+        "handle_leak.min_thread_growth" | "io_heavy.min_mb_per_sec" => 1..=100_000,
+        _ => panic!("no limits defined for setting `{name}`"),
     }
 }
 
